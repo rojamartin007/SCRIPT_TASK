@@ -1,0 +1,25 @@
+<suitelet scriptid="customscript_jj_blood_donor_details">
+  <description></description>
+  <isinactive>F</isinactive>
+  <name>JJ SL Custom Form To Store Blood Donor</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/JobinAndJismi/OTP-9778-Blood-Donor-Form/jj_sl_blood_donor_form.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_jj_blood_donor_details">
+      <allemployees>T</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>T</allroles>
+      <audslctrole></audslctrole>
+      <eventtype></eventtype>
+      <isdeployed>T</isdeployed>
+      <isonline>F</isonline>
+      <loglevel>DEBUG</loglevel>
+      <runasrole></runasrole>
+      <status>TESTING</status>
+      <title>JJ SL Custom Form To Store Blood Donor</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>
