@@ -20,7 +20,7 @@
  * @version 1.0 : 29-October-2025 : Initial build by JJ0418
  * 
 *************************************************************************************************/
-// 
+
 
 define(['N/ui/serverWidget', 'N/record'],
     (serverWidget, record) => {
