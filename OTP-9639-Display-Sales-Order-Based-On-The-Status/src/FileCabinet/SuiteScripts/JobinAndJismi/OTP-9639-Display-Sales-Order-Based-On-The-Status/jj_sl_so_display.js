@@ -21,6 +21,7 @@
  * @version 1.0 : 22-October-2025  : Initial version created by JJ0418
  * 
 ************************************************************************************************/
+// 
 define(['N/search', 'N/ui/serverWidget'], (search, serverWidget) => {
 
   const CLIENT_SCRIPT_PATH = './jj_cs_so_display.js';
