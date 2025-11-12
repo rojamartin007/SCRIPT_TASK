@@ -1,0 +1,25 @@
+<suitelet scriptid="customscript_jj_sl_external_form">
+  <description></description>
+  <isinactive>F</isinactive>
+  <name>JJ SL External Custom Record Form</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/JobinAndJismi/OTP-9681-External-Form-Actions/_jj_sl_external_form_actions.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_jj_sl_external_form">
+      <allemployees>T</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>T</allroles>
+      <audslctrole>ONLINE_FORM_USER</audslctrole>
+      <eventtype></eventtype>
+      <isdeployed>T</isdeployed>
+      <isonline>T</isonline>
+      <loglevel>DEBUG</loglevel>
+      <runasrole>ADMINISTRATOR</runasrole>
+      <status>RELEASED</status>
+      <title>JJ SL External Custom Record Form And Actions</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>
