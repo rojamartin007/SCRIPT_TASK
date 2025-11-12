@@ -20,10 +20,11 @@
  *
  * @version 1.0 : 22-October-2025  : Initial version created by JJ0418
  * 
-*************************************************************************************************/
+************************************************************************************************/
 define(['N/search', 'N/ui/serverWidget'], (search, serverWidget) => {
 
   const CLIENT_SCRIPT_PATH = './jj_cs_so_display.js';
+
 
   /**
  * Entry point for the Suitelet script execution.
@@ -57,6 +58,7 @@ define(['N/search', 'N/ui/serverWidget'], (search, serverWidget) => {
     } catch (e) {
       log.error('Suitelet Error', e);
       scriptContext.response.write('An unexpected error occurred. Please contact your administrator.');
+      log.audit('Suitelet Execution Failed', e);
     }
   };
 
