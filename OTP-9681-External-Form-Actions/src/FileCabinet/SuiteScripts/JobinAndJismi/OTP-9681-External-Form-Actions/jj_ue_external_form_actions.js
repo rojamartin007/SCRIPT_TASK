@@ -74,7 +74,7 @@ define(['N/record', 'N/search', 'N/email', 'N/runtime'],
 
         inquiryRecord.save();
       } catch (error) {
-        log.error({ title: 'Linking Error', details: error });
+          log.error({ title: 'Linking Error', details: error });
       }
     }
 
@@ -88,15 +88,15 @@ define(['N/record', 'N/search', 'N/email', 'N/runtime'],
     function notifyAdmin(name, emailValue, subject, message) {
       try {
         const emailBody = `
-A new customer inquiry has been submitted:
+       A new customer inquiry has been submitted:
 
-Customer Name: ${name}
-Customer Email: ${emailValue}
-Subject: ${subject}
-Message:
-${message}
+       Customer Name: ${name}
+       Customer Email: ${emailValue}
+       Subject: ${subject}
+       Message:
+       ${message}
 
-Please review the inquiry in NetSuite.
+       Please review the inquiry in NetSuite.
       `;
 
         email.send({
@@ -106,7 +106,7 @@ Please review the inquiry in NetSuite.
           body: emailBody
         });
       } catch (error) {
-        log.error({ title: 'Admin Notification Error', details: error });
+          log.error({ title: 'Admin Notification Error', details: error });
       }
     }
 
@@ -121,16 +121,16 @@ Please review the inquiry in NetSuite.
     function notifySalesRep(salesRepId, name, emailValue, subject, message) {
       try {
         const emailBody = `
-You have received a new inquiry from your customer:
+          You have received a new inquiry from your customer:
 
-Customer Name: ${name}
-Customer Email: ${emailValue}
-Subject: ${subject}
-Message:
-${message}
+          Customer Name: ${name}
+          Customer Email: ${emailValue}
+          Subject: ${subject}
+          Message:
+          ${message}
 
-Please follow up as needed.
-      `;
+          Please follow up as needed.
+                `;
 
         email.send({
           author: runtime.getCurrentUser().id,
@@ -139,7 +139,7 @@ Please follow up as needed.
           body: emailBody
         });
       } catch (error) {
-        log.error({ title: 'Sales Rep Notification Error', details: error });
+          log.error({ title: 'Sales Rep Notification Error', details: error });
       }
     }
 
@@ -173,7 +173,7 @@ Please follow up as needed.
           }
         }
       } catch (error) {
-        log.error({ title: 'afterSubmit Error', details: error });
+          log.error({ title: 'afterSubmit Error', details: error });
       }
     }
 
