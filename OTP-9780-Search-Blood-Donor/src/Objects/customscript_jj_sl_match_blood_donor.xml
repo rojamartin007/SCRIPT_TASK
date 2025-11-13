@@ -1,0 +1,25 @@
+<suitelet scriptid="customscript_jj_sl_match_blood_donor">
+  <description></description>
+  <isinactive>F</isinactive>
+  <name>JJ SL Search To Find  Match Blood Donor</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/JobinAndJismi/OTP-9780/jj_sl_Search_through_the_database_to_find_the_matching_blood_donors.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_jj_sl_match_blood_donor">
+      <allemployees>T</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>T</allroles>
+      <audslctrole></audslctrole>
+      <eventtype></eventtype>
+      <isdeployed>T</isdeployed>
+      <isonline>F</isonline>
+      <loglevel>DEBUG</loglevel>
+      <runasrole></runasrole>
+      <status>TESTING</status>
+      <title>JJ SL Search To Find  Match Blood Donor</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>
