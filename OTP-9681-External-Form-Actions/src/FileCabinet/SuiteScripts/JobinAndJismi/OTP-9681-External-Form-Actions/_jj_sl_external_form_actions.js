@@ -13,115 +13,206 @@
  * 
  * Date Created : 25-October-2025 
  * 
- * Description : Suitelet script to allow external users to submit customer inquiries into NetSuite 
- *               without requiring login access. Captures name, email, subject, and message.
+ * Description : Suitelet script enables external users to submit customer queries directly into NetSuite without login access. 
  * 
  * REVISION HISTORY
  *
- * @version 1.0 : 25-October-2025  : Initial version created by JJ0418
+ * @version 1.0 : 25-October-2025 : Initial build by JJ0418
  * 
-*************************************************************************************************/ 
+*************************************************************************************************/
 
-
-define(['N/ui/serverWidget', 'N/record'], 
-/**
- * @param {serverWidget} serverWidget
- * @param {record} record
- */
-function(serverWidget, record) {
-
+define(['N/ui/serverWidget', 'N/record', 'N/search'],
   /**
-   * Builds and returns the Suitelet form for customer inquiry submission.
-   * @returns {serverWidget.Form} A form object with input fields and submit button
+   * @param {serverWidget} serverWidget - NetSuite UI module
+   * @param {record} record - NetSuite record module
+   * @param {search} search - NetSuite search module
+   * 
    */
-  function buildForm() {
-    const form = serverWidget.createForm({ title: 'Customer Inquiry Form' });
+  (serverWidget, record, search) => {
 
-    form.addField({
-      id: 'custpage_name',
-      type: serverWidget.FieldType.TEXT,
-      label: 'Customer Name'
-    }).isMandatory = true;
-
-    form.addField({
-      id: 'custpage_email',
-      type: serverWidget.FieldType.EMAIL,
-      label: 'Customer Email'
-    }).isMandatory = true;
-
-    form.addField({
-      id: 'custpage_subject',
-      type: serverWidget.FieldType.TEXT,
-      label: 'Subject'
-    }).isMandatory = true;
-
-    form.addField({
-      id: 'custpage_message',
-      type: serverWidget.FieldType.TEXTAREA,
-      label: 'Message'
-    }).isMandatory = true;
-
-    form.addSubmitButton({ label: 'Submit Inquiry' });
-    return form;
-  }
-
-  /**
-   * Creates a custom record to store the submitted inquiry details.
-   * @param {Object} params - Form parameters
-   * @param {string} params.name - Customer name
-   * @param {string} params.email - Customer email
-   * @param {string} params.subject - Inquiry subject
-   * @param {string} params.message - Inquiry message
-   */
-  function createInquiryRecord(params) {
-    try {
-      const inquiry = record.create({
-        type: 'customrecord_jj_customer_inquiry',
-        isDynamic: true
-      });
-
-      inquiry.setValue({ fieldId: 'custrecord_jj_customer_name', value: params.name });
-      inquiry.setValue({ fieldId: 'custrecord_jj_customer_email', value: params.email });
-      inquiry.setValue({ fieldId: 'custrecord_jj_subject', value: params.subject });
-      inquiry.setValue({ fieldId: 'custrecord_jj_message', value: params.message });
-
-      const recordId = inquiry.save();
-      log.audit('Inquiry Record Created', `Record ID: ${recordId}`);
-    } catch (error) {
-      log.error({ title: 'Create Inquiry Error', details: error });
-    }
-  }
-
-  /**
-   * Entry point for Suitelet execution.
-   * @param {Object} context - Suitelet context
-   * @param {ServerRequest} context.request - Incoming request object
-   * @param {ServerResponse} context.response - Response object to write output
-   */
-  function onRequest(context) {
-    if (context.request.method === 'GET') {
-      log.debug('Suitelet Request', 'Rendering inquiry form');
-      context.response.writePage(buildForm());
-    } else {
+    /**
+     * Suitelet entry point
+     * @param {Object} scriptContext - Context object
+     * @param {ServerRequest} scriptContext.request - Incoming request
+     * @param {ServerResponse} scriptContext.response - Suitelet response
+     */
+    const onRequest = (scriptContext) => {
       try {
-        const params = {
-          name: context.request.parameters.custpage_name,
-          email: context.request.parameters.custpage_email,
-          subject: context.request.parameters.custpage_subject,
-          message: context.request.parameters.custpage_message
-        };
+        if (scriptContext.request.method === 'GET') {
+          const form = createContactForm();
+          scriptContext.response.writePage(form);
+        } else if (scriptContext.request.method === 'POST') {
+          const custName = scriptContext.request.parameters.custpage_custname;
+          const custEmail = scriptContext.request.parameters.custpage_email;
+          const subject = scriptContext.request.parameters.custpage_subject;
+          const message = scriptContext.request.parameters.custpage_message;
 
-        log.debug('Form Submission Received', JSON.stringify(params));
-        createInquiryRecord(params);
-        context.response.write('Thank you! Your inquiry has been submitted.');
+          if (isDuplicateEmail(custEmail)) {
+            log.audit({
+              title: 'Duplicate Submission Blocked',
+              details: `Email already exists: ${custEmail}`
+            });
+            scriptContext.response.write(`
+                            <script>
+                                alert('A record with this email address already exists. Please use a different email or contact support.');
+                                history.back();
+                            </script>
+                        `);
+            return;
+          }
+
+          const customerId = getCustomerByEmail(custEmail);
+          const recordId = createCustomRecord(custName, custEmail, subject, message, customerId);
+
+
+
+          scriptContext.response.write(`
+                        <h2>Thank you for your submission!</h2>
+                        <p>Your message has been successfully submitted.</p>
+                    `);
+        }
       } catch (error) {
-        log.error({ title: 'Form Submission Error', details: error });
-        context.response.write('An error occurred. Please try again later.');
+          log.error({
+            title: 'Error in onRequest',
+            details: error
+          });
+          scriptContext.response.write('<h2>Error:</h2><p>' + error.message + '</p>');
       }
-    }
-  }
+    };
 
-  return {
-    onRequest: onRequest
-  };
-});
+    /**
+     * Creates Suitelet form for external customer contact
+     * @returns {N/ui/serverWidget.Form} Suitelet form object
+     */
+    const createContactForm = () => {
+      try {
+        const form = serverWidget.createForm({
+          title: 'External Customer Contact Form'
+        });
+
+        form.addField({
+          id: 'custpage_custname',
+          type: serverWidget.FieldType.TEXT,
+          label: 'Customer Name'
+        }).isMandatory = true;
+
+        form.addField({
+          id: 'custpage_email',
+          type: serverWidget.FieldType.EMAIL,
+          label: 'Customer Email'
+        }).isMandatory = true;
+
+        form.addField({
+          id: 'custpage_subject',
+          type: serverWidget.FieldType.TEXT,
+          label: 'Subject'
+        }).isMandatory = true;
+
+        form.addField({
+          id: 'custpage_message',
+          type: serverWidget.FieldType.LONGTEXT,
+          label: 'Message'
+        }).isMandatory = true;
+
+        form.addSubmitButton({ label: 'Submit' });
+        form.addResetButton({ label: 'Reset' });
+
+        return form;
+      } catch (error) {
+          log.error({
+            title: 'Error in createContactForm',
+            details: error
+          });
+          throw error;
+      }
+    };
+
+    /**
+     * Retrieves customer internal ID by email
+     * @param {string} custEmail - Customer email
+     * @returns {number|null} Internal ID or null if not found
+     */
+    const getCustomerByEmail = (custEmail) => {
+      try {
+        const result = search.create({
+          type: search.Type.CUSTOMER,
+          filters: [['email', 'is', custEmail]],
+          columns: ['internalid']
+        }).run().getRange({ start: 0, end: 1 });
+
+        return result.length > 0 ? result[0].getValue('internalid') : null;
+      } catch (error) {
+          log.error({
+            title: 'Error in getCustomerByEmail',
+            details: error
+          });
+          throw error;
+      }
+    };
+
+    /**
+     * Checks for duplicate email in custom record
+     * @param {string} custEmail - Email to check
+     * @returns {boolean} True if duplicate exists
+     */
+    const isDuplicateEmail = (custEmail) => {
+      try {
+        const duplicateSearch = search.create({
+          type: 'customrecord_jj_customer_inquiry',
+          filters: [['custrecord_jj_customer_email', 'is', custEmail]],
+          columns: ['internalid']
+        }).run().getRange({ start: 0, end: 1 });
+
+        return duplicateSearch.length > 0;
+      } catch (error) {
+          log.error({
+            title: 'Error in isDuplicateEmail',
+            details: error
+          });
+          throw error;
+      }
+    };
+
+    /**
+     * Creates custom record for customer submission
+     * @param {string} custName - Customer name
+     * @param {string} custEmail - Customer email
+     * @param {string} subject - Subject
+     * @param {string} message - Message
+     * @param {number|null} customerId - Related customer ID
+     * @returns {number} Created record ID
+     */
+    const createCustomRecord = (custName, custEmail, subject, message, customerId) => {
+      try {
+        const customRecord = record.create({
+          type: 'customrecord_jj_customer_inquiry',
+          isDynamic: true
+        });
+
+        customRecord.setValue({ fieldId: 'custrecord_jj_customer_name', value: custName });
+        customRecord.setValue({ fieldId: 'custrecord_jj_customer_email', value: custEmail });
+        customRecord.setValue({ fieldId: 'custrecord_jj_subject', value: subject });
+        customRecord.setValue({ fieldId: 'custrecord_jj_message', value: message });
+
+        if (customerId) {
+          customRecord.setValue({
+            fieldId: 'custrecord_jj_linked_customer',
+            value: customerId
+          });
+        }
+
+        return customRecord.save({
+          enableSourcing: true,
+          ignoreMandatoryFields: true
+        });
+      } catch (error) {
+          log.error({
+            title: 'Error in createCustomRecord',
+            details: error
+          });
+          throw error;
+      }
+    };
+
+    return { onRequest };
+  });

@@ -11,173 +11,219 @@
  * 
  * Author: Jobin and Jismi IT Services 
  * 
- * Date Created : 25-October-2025  
+ * Date Created : 25-October-2025 
  * 
- * Description : User Event script triggered on creation of a custom inquiry record. 
- *               It links the inquiry to a matching customer and sends notifications to admin and sales rep.
+ * Description : UserEvent script sends notifications when external customer inquiries are submitted. 
  * 
  * REVISION HISTORY
  *
- * @version 1.0 : 25-October-2025  : Initial version created by JJ0418
+ * @version 1.0 : 25-October-2025 : Initial build by JJ0418
  * 
 *************************************************************************************************/
 
-define(['N/record', 'N/search', 'N/email', 'N/runtime'],
+define(['N/search', 'N/email', 'N/record'],
   /**
-   * @param {record} record
-   * @param {search} search
-   * @param {email} email
-   * @param {runtime} runtime
+   * @param {search} search - NetSuite search module
+   * @param {email} email - NetSuite email module
+   * @param {record} record - NetSuite record module
    */
-  function (record, search, email, runtime) {
-
-    const ADMIN_ID = -5;
+  (search, email, record) => {
 
     /**
-     * Searches for a customer using the provided email address.
-     * @param {string} emailValue - Email address to search
-     * @returns {search.Result|null} Matching customer result or null
+     * Triggered after a record is submitted
+     * @param {Object} scriptContext - Context object
+     * @param {Record} scriptContext.newRecord - Newly created record
+     * @param {string} scriptContext.type - Event type (CREATE, EDIT, DELETE)
      */
-    function findCustomerByEmail(emailValue) {
+    const afterSubmit = (scriptContext) => {
+      try {
+        if (scriptContext.type !== scriptContext.UserEventType.CREATE) return;
+
+        const newRec = scriptContext.newRecord;
+        const custName = newRec.getValue('custrecord_jj_customer_name');
+        const custEmail = newRec.getValue('custrecord_jj_customer_email');
+        const subject = newRec.getValue('custrecord_jj_subject');
+        const message = newRec.getValue('custrecord_jj_message');
+        const customerId = newRec.getValue('custrecord_jj_linked_customer');
+
+
+        if (!customerId) {
+          log.audit({
+            title: 'No Customer Linked',
+            details: `External form email ${custEmail || 'N/A'} did not match any customer.`
+          });
+        } else {
+
+          try {
+            record.submitFields({
+              type: record.Type.CUSTOMER,
+              id: customerId,
+              values: {
+                custentity_jj_last_inquiry: newRec.id
+              },
+              options: {
+                ignoreMandatoryFields: true
+              }
+            });
+
+            log.audit({
+              title: 'Customer Linked to Inquiry',
+              details: `Customer ID=${customerId}, Inquiry ID=${newRec.id}`
+            });
+          } catch (linkError) {
+              log.error({
+                title: 'Error Linking Inquiry to Customer',
+                details: linkError
+              });
+          }
+        }
+
+        const { salesRepEmail, isSalesRepActive } = customerId
+          ? getSalesRepInfo(customerId)
+          : { salesRepEmail: null, isSalesRepActive: false };
+
+        sendNotifications(custName, custEmail, subject, message, customerId, salesRepEmail, isSalesRepActive);
+      } catch (error) {
+          log.error({
+            title: 'Error in afterSubmit',
+            details: error
+          });
+      }
+    };
+
+    /**
+     * Retrieves active Sales Rep information for a customer
+     * @param {number} customerId - Internal ID of the customer
+     * @returns {{salesRepEmail: string|null, isSalesRepActive: boolean}} Sales Rep details
+     */
+    const getSalesRepInfo = (customerId) => {
       try {
         const customerSearch = search.create({
           type: search.Type.CUSTOMER,
-          filters: [['email', 'is', emailValue]],
-          columns: ['internalid', 'salesrep']
+          filters: [
+            ['internalid', 'is', customerId],
+            'AND',
+            ['salesrep.isinactive', 'is', 'F']
+          ],
+          columns: [
+            search.createColumn({ name: 'salesrep' }),
+            search.createColumn({ name: 'email', join: 'salesrep' }),
+            search.createColumn({ name: 'isinactive', join: 'salesrep' })
+          ]
         });
 
-        const result = customerSearch.run().getRange({ start: 0, end: 1 });
-        return result.length > 0 ? result[0] : null;
+        const results = customerSearch.run().getRange({ start: 0, end: 1 });
+
+        if (!results || results.length === 0) {
+          log.audit({
+            title: 'Customer or Active Sales Rep Not Found',
+            details: `No customer or sales rep inactive for ID: ${customerId}`
+          });
+          return { salesRepEmail: null, isSalesRepActive: false };
+        }
+
+        const salesRepId = results[0].getValue('salesrep');
+        const salesRepEmail = results[0].getValue({ name: 'email', join: 'salesrep' });
+
+        if (!salesRepId || !salesRepEmail) {
+          log.audit({
+            title: 'Sales Rep Missing Info',
+            details: `ID=${salesRepId || 'N/A'}, Email=${salesRepEmail || 'N/A'}`
+          });
+          return { salesRepEmail: null, isSalesRepActive: false };
+        }
+
+        log.audit({
+          title: 'Active Sales Rep Email Found',
+          details: salesRepEmail
+        });
+        return { salesRepEmail, isSalesRepActive: true };
+
       } catch (error) {
-        log.error({ title: 'Customer Search Error', details: error });
-        return null;
+          log.error({
+            title: 'Error in getSalesRepInfo',
+            details: error
+          });
+        return { salesRepEmail: null, isSalesRepActive: false };
       }
-    }
+    };
 
     /**
-     * Links the inquiry record to the matched customer.
-     * @param {number} inquiryId - Internal ID of the inquiry record
-     * @param {number} customerId - Internal ID of the customer
-     */
-    function linkCustomerToInquiry(inquiryId, customerId) {
-      try {
-        const inquiryRecord = record.load({
-          type: 'customrecord_jj_customer_inquiry',
-          id: inquiryId,
-          isDynamic: true
-        });
-
-        inquiryRecord.setValue({
-          fieldId: 'custrecord_jj_linked_customer',
-          value: customerId
-        });
-
-        inquiryRecord.save();
-      } catch (error) {
-          log.error({ title: 'Linking Error', details: error });
-      }
-    }
-
-    /**
-     * Sends an email notification to the admin about the new inquiry.
-     * @param {string} name - Customer name
-     * @param {string} emailValue - Customer email
+     * Sends notification emails to Admin and Sales Rep
+     * @param {string} custName - Customer name
+     * @param {string} custEmail - Customer email
      * @param {string} subject - Inquiry subject
      * @param {string} message - Inquiry message
+     * @param {number|null} customerId - Linked customer ID
+     * @param {string|null} salesRepEmail - Sales Rep email
+     * @param {boolean} isSalesRepActive - Whether Sales Rep is active
      */
-    function notifyAdmin(name, emailValue, subject, message) {
+    const sendNotifications = (custName, custEmail, subject, message, customerId, salesRepEmail, isSalesRepActive) => {
       try {
-        const emailBody = `
-       A new customer inquiry has been submitted:
+        const adminId = -5;
 
-       Customer Name: ${name}
-       Customer Email: ${emailValue}
-       Subject: ${subject}
-       Message:
-       ${message}
+        const formattedMessage = `
+                    <p><b>Customer Name:</b> ${custName || 'Not Provided'}</p>
+                    <p><b>Email:</b> ${custEmail || 'Not Provided'}</p>
+                    <p><b>Subject:</b> ${subject || 'Not Provided'}</p>
+                    <p><b>Message:</b><br>${message || 'No message provided'}</p>
+                    <p><b>Linked Customer:</b> ${customerId || 'No match found'}</p>
+                `;
 
-       Please review the inquiry in NetSuite.
-      `;
 
-        email.send({
-          author: runtime.getCurrentUser().id,
-          recipients: ADMIN_ID,
-          subject: 'New Customer Inquiry Submitted',
-          body: emailBody
-        });
-      } catch (error) {
-          log.error({ title: 'Admin Notification Error', details: error });
-      }
-    }
-
-    /**
-     * Sends an email notification to the sales rep assigned to the customer.
-     * @param {number} salesRepId - Internal ID of the sales rep
-     * @param {string} name - Customer name
-     * @param {string} emailValue - Customer email
-     * @param {string} subject - Inquiry subject
-     * @param {string} message - Inquiry message
-     */
-    function notifySalesRep(salesRepId, name, emailValue, subject, message) {
-      try {
-        const emailBody = `
-          You have received a new inquiry from your customer:
-
-          Customer Name: ${name}
-          Customer Email: ${emailValue}
-          Subject: ${subject}
-          Message:
-          ${message}
-
-          Please follow up as needed.
+        const adminEmailBody = `
+                    <p>Dear Admin,</p>
+                    <p>A new external contact form has been submitted. The details are as follows:</p>
+                    ${formattedMessage}
+                    <br>
+                    <p>Best regards,<br><b>NetSuite Automated Notification</b></p>
                 `;
 
         email.send({
-          author: runtime.getCurrentUser().id,
-          recipients: salesRepId,
-          subject: 'Customer Inquiry Notification',
-          body: emailBody
+          author: adminId,
+          recipients: adminId,
+          subject: `New External Form Submission - ${subject || 'No Subject'}`,
+          body: adminEmailBody
         });
-      } catch (error) {
-          log.error({ title: 'Sales Rep Notification Error', details: error });
-      }
-    }
+        log.audit({
+          title: 'Admin Email Sent',
+          details: `To Admin ID=${adminId}`
+        });
 
-    /**
-     * Triggered after a new inquiry record is submitted.
-     * @param {UserEventContext} context - User event context
-     */
-    function afterSubmit(context) {
-      if (context.type !== context.UserEventType.CREATE) return;
 
-      try {
-        const newRecord = context.newRecord;
-        const emailValue = newRecord.getValue('custrecord_jj_customer_email');
-        const nameValue = newRecord.getValue('custrecord_jj_customer_name');
-        const subjectValue = newRecord.getValue('custrecord_jj_subject');
-        const messageValue = newRecord.getValue('custrecord_jj_message');
+        if (salesRepEmail && isSalesRepActive) {
+          const salesRepEmailBody = `
+                        <p>Dear Sales Representative,</p>
+                        <p>A new customer has submitted an inquiry through the external contact form. The details are below:</p>
+                        ${formattedMessage}
+                        <br>
+                        <p>Best regards,<br><b>NetSuite Automated Notification</b></p>
+                    `;
 
-        if (!emailValue) return;
-
-        notifyAdmin(nameValue, emailValue, subjectValue, messageValue);
-
-        const customer = findCustomerByEmail(emailValue);
-        if (customer) {
-          const customerId = customer.getValue('internalid');
-          const salesRepId = customer.getValue('salesrep');
-
-          linkCustomerToInquiry(newRecord.id, customerId);
-
-          if (salesRepId) {
-            notifySalesRep(salesRepId, nameValue, emailValue, subjectValue, messageValue);
-          }
+          email.send({
+            author: adminId,
+            recipients: salesRepEmail,
+            subject: `New Customer Submission - ${custName || 'Unnamed Customer'}`,
+            body: salesRepEmailBody
+          });
+          log.audit({
+            title: 'Sales Rep Email Sent',
+            details: salesRepEmail
+          });
+        } else {
+          log.audit({
+            title: 'Sales Rep Notification Skipped',
+            details: 'No active Sales Rep email available.'
+          });
         }
-      } catch (error) {
-          log.error({ title: 'afterSubmit Error', details: error });
-      }
-    }
 
-    return {
-      afterSubmit: afterSubmit
+      } catch (error) {
+          log.error({
+            title: 'Error in sendNotifications',
+            details: error
+          });
+      }
     };
+
+    return { afterSubmit };
   });
