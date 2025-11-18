@@ -23,59 +23,34 @@
  * 
  *************************************************************************************************/ 
 
-
-define(['N/url', 'N/currentRecord'], 
+define(['N/url'], 
 /**
- * @param {url} url
- * @param {currentRecord} currentRecord
+ * @param {url} url - NetSuite URL module
  */
-(url, currentRecord) => {
+(url) => {
   const scriptId = 'customscript_jj_sl_so_status';
   const deploymentId = 'customdeploy_jj_sl_so_status';
 
   /**
-   * Triggered when a field value changes on the form.
+   * Reset Filters button handler.
+   * Clears all filters and reloads the Suitelet with default values.
    * 
-   * If the changed field is one of the filters, the function collects all current filter values
-   * and reloads the Suitelet with those values as URL parameters.
-   * 
-   * @param {Object} context - Field change context
-   * @param {string} context.fieldId - ID of the field that changed
+   * @returns {void}
    */
-  const fieldChanged = (context) => {
+  function resetFilters() {
     try {
-      const record = currentRecord.get();
+      const resolvedUrl = url.resolveScript({
+        scriptId,
+        deploymentId,
+        params: {} 
+      });
 
-      const fieldMap = {
-        custpage_jj_status_filter: 'custpage_jj_status_filter',
-        custpage_jj_customer_filter: 'custpage_jj_customer_filter',
-        custpage_jj_subsidiary_filter: 'custpage_jj_subsidiary_filter',
-        custpage_jj_department_filter: 'custpage_jj_department_filter'
-      };
-
-      if (Object.keys(fieldMap).includes(context.fieldId)) {
-        const params = {};
-
-        Object.keys(fieldMap).forEach(fieldId => {
-          const value = record.getValue({ fieldId });
-          if (value) {
-            params[fieldMap[fieldId]] = value;
-          }
-        });
-
-        const resolvedUrl = url.resolveScript({
-          scriptId,
-          deploymentId,
-          params
-        });
-
-        window.location.href = resolvedUrl;
-      }
+    
+      window.location.replace(resolvedUrl);
     } catch (error) {
-      console.error('Field change handling failed:', error);
-      alert('An error occurred while applying filters. Please try again.');
+      console.error('Reset Filters failed:', error);
     }
-  };
+  }
 
-  return { fieldChanged };
+  return { resetFilters };
 });
