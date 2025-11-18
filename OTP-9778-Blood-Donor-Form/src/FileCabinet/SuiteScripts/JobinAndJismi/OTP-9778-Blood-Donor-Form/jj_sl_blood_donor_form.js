@@ -22,54 +22,62 @@
 *************************************************************************************************/
 
 
-define(['N/ui/serverWidget', 'N/record'],
-    (serverWidget, record) => {
+
+define(['N/ui/serverWidget', 'N/record', 'N/log', 'N/search'],
+    /**
+     * @param {serverWidget} serverWidget - NetSuite UI module for building forms
+     * @param {record} record - NetSuite record module for CRUD operations
+     * @param {log} log - NetSuite logging module
+     * @param {search} search - NetSuite search module
+     */
+    function (serverWidget, record, log, search) {
 
         /**
-         * Entry point for the Suitelet script. Determines whether to render the form or process submission.
+         * Entry point for Suitelet execution.
+         *
          * @param {Object} context - Suitelet context object
          * @param {ServerRequest} context.request - Incoming request object
-         * @param {ServerResponse} context.response - Response object to write output
-         * @returns {void}
+         * @param {ServerResponse} context.response - Outgoing response object
          */
         function onRequest(context) {
             try {
                 if (context.request.method === 'GET') {
-                    renderBloodRequirementForm(context);
+                    displayForm(context);
                 } else {
-                    handleFormSubmission(context);
+                    saveRecord(context);
                 }
-            } catch (error) {
-                log.error('onRequest Error', error.message || error.toString());
+            } catch (e) {
+                log.error('Error in onRequest', e.message || e.toString());
             }
         }
 
         /**
-         * Renders the blood requirement registration form using NetSuite's standard UI components.
+         * Displays the blood donor registration form.
+         *
          * @param {Object} context - Suitelet context object
-         * @param {ServerResponse} context.response - Response object to write the form
-         * @returns {void}
          */
-        function renderBloodRequirementForm(context) {
+        function displayForm(context) {
             try {
                 const form = serverWidget.createForm({
-                    title: 'Blood Requirement Registration'
+                    title: 'Blood Donor Registration Form'
                 });
 
+           
                 form.addField({
-                    id: 'custpage_first_name',
+                    id: 'custrecord_jj_first_name',
                     type: serverWidget.FieldType.TEXT,
                     label: 'First Name'
                 }).isMandatory = true;
 
+            
                 form.addField({
-                    id: 'custpage_last_name',
+                    id: 'custrecord_jj_last_name',
                     type: serverWidget.FieldType.TEXT,
                     label: 'Last Name'
                 }).isMandatory = true;
 
                 const genderField = form.addField({
-                    id: 'custpage_gender',
+                    id: 'custrecord_jj_gender',
                     type: serverWidget.FieldType.SELECT,
                     label: 'Gender'
                 });
@@ -77,32 +85,35 @@ define(['N/ui/serverWidget', 'N/record'],
                 genderField.addSelectOption({ value: '', text: '' });
                 genderField.addSelectOption({ value: '1', text: 'Male' });
                 genderField.addSelectOption({ value: '2', text: 'Female' });
-                genderField.addSelectOption({ value: '3', text: 'Other' });
+                genderField.addSelectOption({ value: '3', text: 'Others' });
 
+           
                 form.addField({
-                    id: 'custpage_phone_number',
+                    id: 'custrecord_jj_phone_number',
                     type: serverWidget.FieldType.PHONE,
                     label: 'Phone Number'
                 }).isMandatory = true;
 
+              
                 const bloodGroupField = form.addField({
-                    id: 'custpage_blood_group',
+                    id: 'custrecord_jj_blood_group',
                     type: serverWidget.FieldType.SELECT,
                     label: 'Blood Group'
                 });
                 bloodGroupField.isMandatory = true;
                 bloodGroupField.addSelectOption({ value: '', text: '' });
-                bloodGroupField.addSelectOption({ value: 'A+', text: 'A+' });
-                bloodGroupField.addSelectOption({ value: 'A-', text: 'A-' });
-                bloodGroupField.addSelectOption({ value: 'B+', text: 'B+' });
-                bloodGroupField.addSelectOption({ value: 'B-', text: 'B-' });
-                bloodGroupField.addSelectOption({ value: 'AB+', text: 'AB+' });
-                bloodGroupField.addSelectOption({ value: 'AB-', text: 'AB-' });
-                bloodGroupField.addSelectOption({ value: 'O+', text: 'O+' });
-                bloodGroupField.addSelectOption({ value: 'O-', text: 'O-' });
+                bloodGroupField.addSelectOption({ value: '1', text: 'A+' });
+                bloodGroupField.addSelectOption({ value: '2', text: 'A-' });
+                bloodGroupField.addSelectOption({ value: '3', text: 'B+' });
+                bloodGroupField.addSelectOption({ value: '4', text: 'B-' });
+                bloodGroupField.addSelectOption({ value: '5', text: 'AB+' });
+                bloodGroupField.addSelectOption({ value: '6', text: 'AB-' });
+                bloodGroupField.addSelectOption({ value: '7', text: 'O+' });
+                bloodGroupField.addSelectOption({ value: '8', text: 'O-' });
 
+              
                 form.addField({
-                    id: 'custpage_last_donation_date',
+                    id: 'custrecord_jj_last_donation_date',
                     type: serverWidget.FieldType.DATE,
                     label: 'Last Donation Date'
                 }).isMandatory = true;
@@ -111,72 +122,124 @@ define(['N/ui/serverWidget', 'N/record'],
 
                 context.response.writePage(form);
             } catch (error) {
-                log.error('renderBloodRequirementForm Error', error.message || error.toString());
+                log.error('displayForm Error', error.message || error.toString());
             }
         }
 
         /**
-         * Handles form submission, validates input, and saves the data to a custom record.
-         * Displays a success or error message based on the outcome.
+         * Saves the submitted donor details to the custom record.
+         * Prevents duplicate donors based on phone number.
+         *
          * @param {Object} context - Suitelet context object
-         * @param {ServerRequest} context.request - Request object containing submitted form data
-         * @param {ServerResponse} context.response - Response object to write confirmation or error
-         * @returns {void}
          */
-        function handleFormSubmission(context) {
+        function saveRecord(context) {
             try {
                 const params = context.request.parameters;
+                const rawDate = params['custrecord_jj_last_donation_date'];
+                const donationDate = new Date(rawDate);
 
-                const donationDate = new Date(params.custpage_last_donation_date);
+                if (isNaN(donationDate.getTime())) {
+                    throw new Error('Invalid date format submitted.');
+                }
+
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
 
-                if (isNaN(donationDate.getTime())) {
-                    throw new Error('Invalid date format.');
+                if (donationDate > today) {
+                    throw new Error('Last Donation Date cannot be a future date.');
                 }
 
-                if (donationDate > today) {
-                    throw new Error('Last Donation Date cannot be in the future.');
+            
+                const phoneNumber = (params['custrecord_jj_phone_number'] || '').trim();
+                if (!phoneNumber) {
+                    throw new Error('Phone Number is required.');
+                }
+
+            
+                const phoneRegex = /^[0-9]{10}$/;
+                if (!phoneRegex.test(phoneNumber)) {
+                    throw new Error('Invalid Phone Number. Please enter exactly 10 digits (only numbers allowed).');
+                }
+
+                // 🔍 Duplicate check
+                const donorSearch = search.create({
+                    type: 'customrecord_jj_blood_donor_record',
+                    filters: [
+                        ['custrecord_jj_phone_number', 'is', phoneNumber]
+                    ],
+                    columns: ['internalid']
+                });
+
+                const results = donorSearch.run().getRange({ start: 0, end: 1 });
+                if (results && results.length > 0) {
+                    throw new Error('Duplicate donor found. A record with this phone number already exists.');
                 }
 
                 const donorRecord = record.create({
-                    type: 'customrecord_blood_donor_request',
+                    type: 'customrecord_jj_blood_donor_record',
                     isDynamic: true
                 });
 
-                donorRecord.setValue({ fieldId: 'custrecord_first_name', value: params.custpage_first_name });
-                donorRecord.setValue({ fieldId: 'custrecord_last_name', value: params.custpage_last_name });
-                donorRecord.setValue({ fieldId: 'custrecord_gender', value: params.custpage_gender });
-                donorRecord.setValue({ fieldId: 'custrecord_phone_number', value: params.custpage_phone_number });
-                donorRecord.setValue({ fieldId: 'custrecord_blood_group', value: params.custpage_blood_group });
-                donorRecord.setValue({ fieldId: 'custrecord_last_donation_date', value: donationDate });
+                donorRecord.setValue({
+                    fieldId: 'custrecord_jj_first_name',
+                    value: params['custrecord_jj_first_name'] || ''
+                });
+
+                donorRecord.setValue({
+                    fieldId: 'custrecord_jj_last_name',
+                    value: params['custrecord_jj_last_name'] || ''
+                });
+
+                donorRecord.setValue({
+                    fieldId: 'custrecord_jj_gender',
+                    value: params['custrecord_jj_gender'] || ''
+                });
+
+                donorRecord.setValue({
+                    fieldId: 'custrecord_jj_phone_number',
+                    value: phoneNumber
+                });
+
+                donorRecord.setValue({
+                    fieldId: 'custrecord_jj_blood_group',
+                    value: params['custrecord_jj_blood_group'] || ''
+                });
+
+                donorRecord.setValue({
+                    fieldId: 'custrecord_jj_last_donation_date',
+                    value: donationDate
+                });
 
                 donorRecord.save();
 
-                const confirmationForm = serverWidget.createForm({ title: 'Submission Successful' });
-                const messageField = confirmationForm.addField({
-                    id: 'custpage_success_msg',
-                    type: serverWidget.FieldType.INLINEHTML,
-                    label: 'Success'
+             
+                const form = serverWidget.createForm({
+                    title: 'Blood Donor Registration'
                 });
-                messageField.defaultValue = '<div style="color:green;font-weight:bold;">Blood requirement registered successfully.</div>';
-                context.response.writePage(confirmationForm);
+
+                const msgField = form.addField({
+                    id: 'custpage_confirmation_msg',
+                    type: serverWidget.FieldType.INLINEHTML,
+                    label: 'Confirmation'
+                });
+                msgField.defaultValue = '<div style="color:green;font-weight:bold;">Donor Registered Successfully.</div>';
+                context.response.writePage(form);
 
             } catch (error) {
-                log.error('handleFormSubmission Error', error.message || error.toString());
+                log.error('saveRecord Error', error.message || error.toString());
 
-                const errorForm = serverWidget.createForm({ title: 'Submission Failed' });
-                const errorField = errorForm.addField({
+                const errForm = serverWidget.createForm({ title: 'Error' });
+                const errField = errForm.addField({
                     id: 'custpage_error_msg',
                     type: serverWidget.FieldType.INLINEHTML,
                     label: 'Error'
                 });
-                errorField.defaultValue = `<div style="color:red;font-weight:bold;">Error: ${error.message}</div>`;
-                context.response.writePage(errorForm);
+                errField.defaultValue = `<div style="padding:10px;border:1px solid #d32f2f;background:#ffebee;color:#c62828;font-weight:600;">Save Failed: ${error.message}</div>`;
+                context.response.writePage(errForm);
             }
         }
 
         return {
-            onRequest
+            onRequest: onRequest
         };
     });
