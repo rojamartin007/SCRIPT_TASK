@@ -109,7 +109,9 @@ define(['N/ui/serverWidget', 'N/search'], function (serverWidget, search) {
     function getEligibleDonors(bloodGroupValue) {
         try {
             const filters = [
-                ['custrecord_jj_last_donation_date', 'onorbefore', 'threemonthsagotodate']
+                ['custrecord_jj_last_donation_date', 'onorbefore', 'threemonthsagotodate'],
+                 'AND',
+            ['isinactive', 'is', 'F']
             ];
 
             if (bloodGroupValue) {
